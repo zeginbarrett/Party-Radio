@@ -18,7 +18,7 @@ Write-Host "Isolated PlatformIO cache: $env:PLATFORMIO_CORE_DIR" -ForegroundColo
 
 Write-Host ''
 Write-Host '====================================================' -ForegroundColor Cyan
-Write-Host ' WAVESHARE PARTY RADIO 20 PRO V3.4 - COMPUTER VOICE' -ForegroundColor Cyan
+Write-Host ' WAVESHARE PARTY RADIO 20 PRO V3.5 - COMPUTER VOICE' -ForegroundColor Cyan
 Write-Host '====================================================' -ForegroundColor Cyan
 Write-Host 'Fix: ESP-IDF LCD GCC crash: -Os + single-worker builds; isolated PlatformIO 6.1.19.'
 Write-Host 'Direct flash: no firmware backup, no flash read, no backup prompt.'

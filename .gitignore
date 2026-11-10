@@ -1,8 +1,0 @@
-.pio/
-.radio-tools/
-.vscode/
-__pycache__/
-*.bin
-*.elf
-*.map
-sdkconfig.waveshare_s3

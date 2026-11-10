@@ -13,7 +13,11 @@
 </div>
 
 > [!IMPORTANT]
-> **Experimental source release, v3.4 (November 2026).** The project includes firmware source and a build-and-flash installer, **not a verified precompiled BIN**. Earlier builds had Windows toolchain/compiler failures, and v3.4's GCC workaround has not yet been confirmed on the physical Waveshare board. The wake word, audio streaming, and microphone coexistence still need board testing. The installer must successfully compile and validate voice-model files before flashing. **No firmware backups are performed.**
+> **Experimental source release, v3.5 (November 2026).** The project includes firmware source and a build-and-flash installer, **not a verified precompiled BIN**. Earlier builds had Windows toolchain/compiler failures, and v3.4's GCC workaround has not yet been confirmed on the physical Waveshare board. The wake word, audio streaming, and microphone coexistence still need board testing. The installer must successfully compile and validate voice-model files before flashing. **No firmware backups are performed.**
+
+
+> [!WARNING]
+> **Computer wake word is NOT verified working on the Waveshare.** The earlier v3.4 source was reported to have nonfunctional wake-word and voice commands. **v3.5 adds a real enable/retry fix and microphone diagnostics**, not a proven hardware audio fix. Open the Voice panel to check live left/right microphone levels, received frames, I²S read failures, wake count and command count. See [v3.5 voice troubleshooting](VOICE-TROUBLESHOOTING-v3.5.md) before assuming the microphone or recognition model works.
 
 ## Gallery
 

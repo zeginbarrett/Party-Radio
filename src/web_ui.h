@@ -72,14 +72,17 @@ input[type=range]{padding:0;accent-color:#6da4ff}.field{margin:10px 0}.field lab
 <p class="hint">Say <strong>Computer</strong>, then "Next station", "Play news", "Play weather", "Volume up", "Party lights", or "Stop music". The speaker uses its own microphones and an offline ESP-SR model.</p>
 <div class="field inline"><input type="checkbox" id="voiceEnabled" checked><label for="voiceEnabled">Enable wake word and commands</label></div>
 <div class="field"><label>Microphone gain (0–14) <output id="micGainOut">8</output></label><input type="range" min="0" max="14" value="8" id="micGain"></div>
+<div class="field"><label for="micChannel">Microphone input channel (experimental)</label><select id="micChannel"><option value="0">Auto: strongest of the two microphones</option><option value="1">Left input</option><option value="2">Right input</option></select></div>
 <div class="row"><button id="saveVoice" class="primary">Save voice settings</button><button id="checkVoice">Check microphone status</button></div>
+<div class="field"><label>Live microphone input</label><div class="hint" id="micLevels">Left: — / Right: —</div><progress id="micLeftBar" max="32767" value="0" style="width:100%"></progress><progress id="micRightBar" max="32767" value="0" style="width:100%"></progress></div>
+<div class="hint" id="voiceHint">Speak near the microphone and look for the levels to move. If sample count stays at zero, the I2S input is not delivering audio.</div>
 <p id="voiceLast" class="hint">Voice: not checked</p>
 <p class="hint">Gain changes restart the speaker. Voice-model startup and listening while music plays require hardware verification. A microphone failure will not stop radio playback.</p>
 </section>
 <section class="panel"><h2>Diagnostics and maintenance</h2><div class="statrow" id="diagnostics"><span>Loading radio status...</span></div>
 <div class="row" style="margin-top:15px"><button id="refresh">Refresh</button><button id="reboot" class="danger">Restart speaker</button></div>
 <p class="hint">Controller is local and does not require a PC or Raspberry Pi. For security, don't forward port 80 from your router.</p></section>
-</div><div id="toast" role="status"></div><div class="hint" style="padding:10px">Party Radio 20 Pro v3.0 • Computer on-device voice integration • No firmware backup in Windows flasher.</div>
+</div><div id="toast" role="status"></div><div class="hint" style="padding:10px">Party Radio 20 Pro v3.5 • Computer microphone diagnostics • No firmware backup in Windows flasher.</div>
 <script>
 'use strict';
 const $=id=>document.getElementById(id);
@@ -103,14 +106,17 @@ for(const key of ['brightness','sensitivity','speed','hue']){let name=key==='bri
 for(const el of document.querySelectorAll('[data-mode]'))el.style.outline=Number(el.dataset.mode)===s.ledMode?'2px solid #8fbeff':'none';
 setCheck('quiet',s.quietHours);setVal('quietStart',s.quietStart);setVal('quietEnd',s.quietEnd);
 setCheck('alarmEnabled',s.alarmEnabled);setVal('alarmHour',s.alarmHour);setVal('alarmMinute',s.alarmMinute);setVal('alarmStation',s.alarmStation);setVal('timezone',s.timezone);
-setCheck('voiceEnabled',s.voiceEnabled);setVal('micGain',s.micGain);
+setCheck('voiceEnabled',s.voiceEnabled);setVal('micGain',s.micGain);setVal('micChannel',s.micChannel??0);
 $('micGainOut').textContent=s.micGain??8;
-$('voiceState').textContent=s.voiceReady?(s.voiceListening?'Listening':s.voiceAwake?'Computer heard':'Microphone ready'):(s.voiceEnabled?'Voice startup failed':'Voice disabled');
-$('voiceLast').textContent=s.voiceReady?'Voice status: '+(s.lastVoiceCommand||'Waiting for Computer')+' • 16 kHz frames: '+(s.voiceFrames||0):'Voice error: '+(s.voiceError||'None');
+$('voiceState').textContent=s.voiceReady?(s.voiceListening?'Listening':s.voiceAwake?'Computer heard':((s.voiceFrames||0)>0?'Mic data arriving':'Engine loaded • no mic samples')):(s.voiceEnabled?'Voice startup failed':'Voice disabled');
+$('micLeftBar').value=s.micLeftLevel||0;$('micRightBar').value=s.micRightLevel||0;
+$('micLevels').textContent='Left: '+(s.micLeftLevel||0)+' / Right: '+(s.micRightLevel||0)+' (0–32767)';
+$('voiceHint').textContent=(!s.voiceReady)?('Voice error: '+(s.voiceError||'Unknown')):(!(s.voiceFrames>0)?'No microphone samples arriving. Check shared I2S clocks / capture configuration.':(!((s.micLeftLevel||0)>25||(s.micRightLevel||0)>25)?'PCM is arriving but appears silent. Try the other mic input and reboot.':'Microphone has measurable activity. If Computer does not wake, reduce radio volume and check model / gain.'));
+$('voiceLast').textContent='Wake detections: '+(s.voiceWakeCount||0)+' • Recognized commands: '+(s.voiceCommandCount||0)+' • PCM frames: '+(s.voiceFrames||0)+' • I2S read failures: '+(s.voiceReadFailures||0)+' • Last command: '+(s.lastVoiceCommand||'None');
 setVal('bootStation',s.bootStation);setVal('bootVolume',s.bootVolume);setCheck('fade',s.fade);setCheck('keepAP',s.keepAP);setVal('hostname',s.hostname);
 $('clock').textContent='Radio clock: '+(s.localTime||'Syncing...');$('sleepLeft').textContent=s.sleepMinutes?'Timer active: about '+s.sleepMinutes+' min remaining':'No sleep timer active';
 $('ssidValue').textContent=s.ssid||'Not connected';$('homeIP').textContent=s.lanIP||'Not connected';$('setupIP').textContent=s.apIP||'Off';$('localHost').textContent='http://'+s.hostname+'.local/';
-$('diagnostics').innerHTML=[['Firmware',s.version],['Wi-Fi signal',s.wifiConnected?s.rssi+' dBm':'Disconnected'],['Uptime',Math.floor((s.uptimeSeconds||0)/60)+' minutes'],['Audio decoder',s.decoderRunning?'Playing':'Idle / connecting'],['Codec',s.codecReady?'Ready':'Not detected'],['Amplifier expander',s.ampExpanderReady?'Ready':'Not detected'],['Wake word',s.voiceWakeWord||'Computer'],['Voice engine',s.voiceReady?'Ready':(s.voiceError||'Not started')],['Microphone samples',s.voiceFrames||0],['Stream retries',s.retries],['Last error',s.lastError||'None'],['Audio level',Math.round((s.audioLevel||0)*100/255)+'%'],['Free RAM',Math.round((s.heapFree||0)/1024)+' KB'],['PSRAM',Math.round((s.psramFree||0)/1024)+' KB']].map(x=>`<span><span class="dim">${h(x[0])}:</span> ${h(x[1])}</span>`).join('');drawStations()}
+$('diagnostics').innerHTML=[['Firmware',s.version],['Wi-Fi signal',s.wifiConnected?s.rssi+' dBm':'Disconnected'],['Uptime',Math.floor((s.uptimeSeconds||0)/60)+' minutes'],['Audio decoder',s.decoderRunning?'Playing':'Idle / connecting'],['Codec',s.codecReady?'Ready':'Not detected'],['Amplifier expander',s.ampExpanderReady?'Ready':'Not detected'],['Wake word',s.voiceWakeWord||'Computer'],['Voice engine',s.voiceReady?'Ready':(s.voiceError||'Not started')],['Microphone samples',s.voiceFrames||0],['Mic L/R level',(s.micLeftLevel||0)+' / '+(s.micRightLevel||0)],['Mic read failures',s.voiceReadFailures||0],['Wake events',s.voiceWakeCount||0],['Recognized commands',s.voiceCommandCount||0],['Stream retries',s.retries],['Last error',s.lastError||'None'],['Audio level',Math.round((s.audioLevel||0)*100/255)+'%'],['Free RAM',Math.round((s.heapFree||0)/1024)+' KB'],['PSRAM',Math.round((s.psramFree||0)/1024)+' KB']].map(x=>`<span><span class="dim">${h(x[0])}:</span> ${h(x[1])}</span>`).join('');drawStations()}
 async function refresh(full=false){try{if(full||!ready){stations=await api('/api/stations');optionList();ready=true;populateEdit()}state=await api('/api/status');if(!full)stations=await api('/api/stations');render()}catch(e){$('connection').textContent='Connection lost';if(full)notify(e.message,true)}}
 $('prev').onclick=()=>doIt('/api/navigation',{step:0});$('next').onclick=()=>doIt('/api/navigation',{step:1});$('toggle').onclick=()=>doIt('/api/toggle',{});$('mute').onclick=()=>doIt('/api/mute',{});
 $('volume').onchange=()=>doIt('/api/volume',{value:$('volume').value});$('volume').oninput=()=>$('volumeValue').textContent=$('volume').value;
@@ -128,7 +134,7 @@ $('importStations').onclick=async()=>{const file=$('importFile').files?.[0];if(!
 $('setSleep').onclick=()=>doIt('/api/sleep',{minutes:$('sleep').value},'Sleep timer updated');
 $('saveAlarm').onclick=()=>doIt('/api/alarm',{enabled:$('alarmEnabled').checked?1:0,hour:$('alarmHour').value,minute:$('alarmMinute').value,station:$('alarmStation').value,timezone:$('timezone').value},'Alarm saved');
 $('micGain').oninput=()=>$('micGainOut').textContent=$('micGain').value;
-$('saveVoice').onclick=()=>doIt('/api/voice',{enabled:$('voiceEnabled').checked?1:0,gain:$('micGain').value},'Voice settings saved (gain changes restart radio)');
+$('saveVoice').onclick=()=>doIt('/api/voice',{enabled:$('voiceEnabled').checked?1:0,gain:$('micGain').value,channel:$('micChannel').value},'Voice settings saved (gain changes restart radio)');
 $('checkVoice').onclick=()=>refresh(true);
 $('saveBoot').onclick=()=>doIt('/api/boot',{station:$('bootStation').value,volume:$('bootVolume').value,fade:$('fade').checked?1:0},'Startup preferences saved');
 $('playCustom').onclick=()=>doIt('/api/stream',{url:$('customStream').value},'Custom stream requested');

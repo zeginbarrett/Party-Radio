@@ -32,7 +32,7 @@ constexpr uint8_t KEY_MASK[3]={0x02,0x04,0x08}; // EXIO09, 10, 11 active low
 }
 
 constexpr uint8_t STATION_COUNT = 20;
-constexpr char FW_VERSION[] = "Waveshare Party Radio 20 Pro v3.3 COMPUTER";
+constexpr char FW_VERSION[] = "Waveshare Party Radio 20 Pro v3.5 MIC DIAGNOSTICS";
 constexpr char AP_SSID[] = "PartyRadio-Setup";
 constexpr char AP_PASS[] = "party-radio20"; // First-boot AP only: change home Wi-Fi via setup page
 
@@ -50,7 +50,7 @@ String hostname="waveshare-radio", apPassword="party-radio20";
 String timezoneRule="CST6CDT,M3.2.0,M11.1.0";
 bool keepSetupAP=true, favoritesOnly=false, shuffleMode=false, muted=false;
 bool fadeEnabled=true, quietHours=false, alarmEnabled=false;
-bool voiceEnabled=true;uint8_t micGain=8;
+bool voiceEnabled=true;uint8_t micGain=8;uint8_t micChannel=0;
 bool voiceDucking=false;uint32_t voiceDuckTime=0;
 String lastVoiceCommand="None";
 uint32_t favoriteMask=0;
@@ -329,6 +329,12 @@ void statusResponse() {
   d["voiceListening"]=Voice::listening();
   d["voiceAwake"]=Voice::awake();
   d["voiceFrames"]=Voice::frames();
+  d["voiceReadFailures"]=Voice::readsFailed();
+  d["voiceWakeCount"]=Voice::wakes();
+  d["voiceCommandCount"]=Voice::recognizedCommands();
+  d["micLeftLevel"]=Voice::micLeftLevel();
+  d["micRightLevel"]=Voice::micRightLevel();
+  d["micChannel"]=micChannel;
   d["voiceWakeWord"]="Computer";
   d["voiceError"]=Voice::error();
   d["micGain"]=micGain;
@@ -596,7 +602,14 @@ void voiceRoute() {
   if(parseIntegerArg("enabled",x)) {
     if(x>1) return errorResponse(400,"Voice enabled must be 0 or 1");
     voiceEnabled=(x==1);prefs.putBool("voice",voiceEnabled);
-    Voice::setEnabled(voiceEnabled);
+    // When initialization failed at startup, merely changing SR mode cannot
+    // start a nonexistent speech task. Schedule a reboot to retry model/I2S init.
+    if(voiceEnabled && !Voice::ready()) rebootAt=millis()+2500;
+    else Voice::setEnabled(voiceEnabled);
+  }
+  if(parseIntegerArg("channel",x)) {
+    if(x>2)return errorResponse(400,"Mic channel 0=Auto, 1=Left, 2=Right");
+    if(micChannel!=x) {micChannel=x;prefs.putUChar("micchannel",x);rebootAt=millis()+2500;}
   }
   if(parseIntegerArg("gain",x)) {
     if(x>14)return errorResponse(400,"ES7210 mic gain 0..14");
@@ -890,6 +903,7 @@ void setup() {
   favoritesOnly=prefs.getBool("favonly",false);shuffleMode=prefs.getBool("shuffle",false);
   fadeEnabled=prefs.getBool("fade",true);
   voiceEnabled=prefs.getBool("voice",true);micGain=prefs.getUChar("micgain",8);
+  micChannel=constrain(int(prefs.getUChar("micchannel",0)),0,2);
   alarmEnabled=prefs.getBool("alarm",false);
   alarmHour=prefs.getUChar("alhour",7);alarmMinute=prefs.getUChar("almin",0);
   alarmStation=constrain(int(prefs.getUChar("alstat",0)),0,STATION_COUNT-1);
@@ -922,7 +936,7 @@ void setup() {
   audio.setConnectionTimeout(5000,7000);
   setAmp(true);
   // Always try on-device speech; failure leaves internet radio fully usable.
-  Voice::begin(voiceEnabled,micGain);
+  Voice::begin(voiceEnabled,micGain,micChannel);
 
   WiFi.mode(keepSetupAP?WIFI_AP_STA:WIFI_STA);
   if(keepSetupAP) startSetupAP();

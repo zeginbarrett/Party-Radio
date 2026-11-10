@@ -5,6 +5,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <atomic>
+#include <algorithm>
 #include "driver/i2s_std.h"
 #include "esp32-hal-sr.h"
 
@@ -13,6 +14,9 @@ namespace {
   std::atomic<int> pending{-1};
   std::atomic<bool> detected{false}, listeningNow{false}, awakeNow{false}, targetOn{true};
   std::atomic<uint32_t> framesSeen{0};
+  std::atomic<uint32_t> readFailures{0}, wakeEvents{0}, commandEvents{0};
+  std::atomic<uint16_t> leftLevel{0}, rightLevel{0};
+  std::atomic<uint8_t> captureChannel{0}; // Auto by default (stronger microphone).
   i2s_chan_handle_t rx=nullptr;
   const char* failure="Not started";
 
@@ -75,7 +79,7 @@ namespace {
   }
   esp_err_t supplyAudio(void*, void* dest,size_t len,size_t*received,uint32_t timeout_ms) {
     *received=0;
-    if(!rx || !targetOn.load())return ESP_FAIL;
+    if(!rx)return ESP_FAIL; // Keep DMA input alive while recognition is toggled off.
     int16_t *out=static_cast<int16_t*>(dest);
     const size_t count=len/sizeof(int16_t);
     // 48 kHz stereo -> 16 kHz mono. 3:1 box decimation is a basic low-pass;
@@ -85,11 +89,25 @@ namespace {
       size_t batch=min(size_t(80),count-pos);
       size_t got=0;
       esp_err_t err=i2s_channel_read(rx,source,batch*3*2*sizeof(int16_t),&got, pdMS_TO_TICKS(timeout_ms?timeout_ms:100));
-      if(err!=ESP_OK || got<batch*3*2*sizeof(int16_t))return err==ESP_OK?ESP_ERR_TIMEOUT:err;
+      if(err!=ESP_OK || got<batch*3*2*sizeof(int16_t)) {
+        readFailures.fetch_add(1,std::memory_order_relaxed);
+        return err==ESP_OK?ESP_ERR_TIMEOUT:err;
+      }
+      uint32_t leftAbs=0,rightAbs=0;
+      for(size_t j=0;j<batch*3;j++) {
+        leftAbs+=uint32_t(abs(int32_t(source[j*2])));
+        rightAbs+=uint32_t(abs(int32_t(source[j*2+1])));
+      }
+      leftAbs/=uint32_t(batch*3); rightAbs/=uint32_t(batch*3);
+      // Track both microphone channels. One dead/incorrectly mapped lane no longer
+      // causes permanently silent wake-word input. The web UI exposes these levels.
+      leftLevel.store(uint16_t(std::min(leftAbs,uint32_t(32767))),std::memory_order_relaxed);
+      rightLevel.store(uint16_t(std::min(rightAbs,uint32_t(32767))),std::memory_order_relaxed);
+      uint8_t configured=captureChannel.load(std::memory_order_relaxed);
+      const bool useRight=(configured==2)||(configured==0 && rightAbs>leftAbs);
       for(size_t j=0;j<batch;j++) {
         int32_t sum=0;
-        // Use MIC1 (left lane), assuming standard Philips I2S stereo interleave.
-        for(int k=0;k<3;k++)sum+=source[(j*3+k)*2];
+        for(int k=0;k<3;k++)sum+=source[(j*3+k)*2 + (useRight?1:0)];
         out[pos+j]=int16_t(sum/3);
       }
       pos+=batch;
@@ -100,16 +118,22 @@ namespace {
   }
   void voiceEvent(void*,sr_event_t evt,int command_id,int) {
     if(evt==SR_EVENT_WAKEWORD) {
+      wakeEvents.fetch_add(1,std::memory_order_relaxed);
+      Serial.println("VOICE: COMPUTER wake word detected");
       awakeNow.store(true);listeningNow.store(true);
       // With mono input_format="M", ESP-SR sends WAKEWORD but does NOT send
       // WAKEWORD_CHANNEL. Enter COMMAND mode immediately or commands are lost.
       if(targetOn.load())sr_set_mode(SR_MODE_COMMAND);
     } else if(evt==SR_EVENT_WAKEWORD_CHANNEL) {
+      // This is channel verification for an existing detection, not a second wake.
+      Serial.println("VOICE: wake channel verified");
       awakeNow.store(true);listeningNow.store(true);
       // ESP-SR's raw API switches to OFF after verification;
       // the application must explicitly enable English command recognition.
       if(targetOn.load())sr_set_mode(SR_MODE_COMMAND);
     } else if(evt==SR_EVENT_COMMAND) {
+      commandEvents.fetch_add(1,std::memory_order_relaxed);
+      Serial.printf("VOICE: recognized command ID %d\n",command_id);
       pending.store(command_id);awakeNow.store(false);listeningNow.store(false);
       if(targetOn.load())sr_set_mode(SR_MODE_WAKEWORD);
     } else if(evt==SR_EVENT_TIMEOUT) {
@@ -141,7 +165,8 @@ namespace {
   };
 }
 namespace Voice {
-  bool begin(bool turnOn,uint8_t gain) {
+  bool begin(bool turnOn,uint8_t gain,uint8_t channel) {
+    captureChannel.store(channel<=2?channel:0);
     targetOn.store(turnOn);
     if(!turnOn){failure="Disabled in web settings";return false;}
     failure="Mic/voice not initialized";
@@ -159,6 +184,12 @@ namespace Voice {
   bool awake(){return awakeNow.load();}
   const char* error(){return failure;}
   uint32_t frames(){return framesSeen.load();}
+  uint32_t readsFailed(){return readFailures.load();}
+  uint32_t wakes(){return wakeEvents.load();}
+  uint32_t recognizedCommands(){return commandEvents.load();}
+  uint16_t micLeftLevel(){return leftLevel.load();}
+  uint16_t micRightLevel(){return rightLevel.load();}
+  uint8_t selectedChannel(){return captureChannel.load();}
   void setEnabled(bool on){targetOn.store(on);if(detected.load())sr_set_mode(on?SR_MODE_WAKEWORD:SR_MODE_OFF);}
   bool enabled(){return targetOn.load();}
 }

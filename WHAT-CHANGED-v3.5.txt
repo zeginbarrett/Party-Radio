@@ -1,0 +1,12 @@
+Party Radio v3.5 - voice diagnostics and retry
+
+- Real fix: enabling voice after failed startup now reboots and retries initialization.
+- More resilient capture on Voice Off/On.
+- Mic Auto/Left/Right selector (Save changes triggers reboot).
+- Live left/right microphone activity and frame/read error counters in web UI.
+- Separate counts for Computer wake events and recognized commands.
+- USB console messages for wake and recognized commands.
+- All original radio, lighting, station, Wi-Fi and installer behavior retained.
+- NO FIRMWARE BACKUP, EVER.
+
+Important: ESP-SR and the mic+speaker clock configuration are not proven working on the device. This release is a source-level diagnostic repair; test mic signal first.
