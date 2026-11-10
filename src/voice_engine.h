@@ -23,6 +23,9 @@ namespace Voice {
   uint16_t micLeftLevel();  // 0..32767, absolute raw input level
   uint16_t micRightLevel(); // 0..32767
   uint8_t selectedChannel(); // 0=auto, 1=left, 2=right
+  int micAnalogReg(); // ES7210 0x40; expected C3
+  int micPowerReg();  // ES7210 0x4B; expected 0F
+  int micFormatReg(); // ES7210 0x11; 16-bit standard I2S
   void setEnabled(bool enabled);
   bool enabled();
 }

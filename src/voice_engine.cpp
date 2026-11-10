@@ -1,5 +1,5 @@
 // Waveshare ESP32-S3-AUDIO-Board microphone + offline ESP-SR wake word / MultiNet.
-// Sharing the radio's 48kHz BCLK/LRCLK with an I2S1 RX slave is unverified on hardware.
+// ESPHome/Sam-inspired ES7210 power-on and standard I2S; radio 48 kHz clock coexistence still unverified.
 // A failed mic/SR initialization MUST NOT disable Wi-Fi radio playback.
 #include "voice_engine.h"
 #include <Arduino.h>
@@ -35,25 +35,45 @@ namespace {
   }
   bool initMic(uint8_t gain) {
     if(rd(0x00)<0){failure="ES7210 microphone missing on I2C";return false;}
-    // ES7210 register initialization based on Espressif ESP-ADF 48kHz, MCLK 12.288MHz.
-    // MIC1/MIC2, 16-bit normal I2S, slave LRCLK/BCLK, both on-board microphone biases.
-    const uint8_t seq[][2]={
-      {0x00,0xff},{0x00,0x41},{0x01,0x3f},{0x09,0x30},{0x0A,0x30},
-      {0x23,0x2a},{0x22,0x0a},{0x20,0x0a},{0x21,0x2a},
-      {0x08,0x00},{0x40,0x43},{0x41,0x70},{0x42,0x70},
-      {0x07,0x20},{0x02,0xc1},
-      // 48kHz coeff table: adc_div=1, dll=1, doubler=1, osr=0x20,
-      // LRCK high=1, low=0. See ESP-ADF es7210_config_sample.
-      {0x02,0xc1},{0x07,0x20},{0x04,0x01},{0x05,0x00},
+    // Sam's working SAM-STD-I2S16-ESPHOME-v4 used standard stereo I2S, not TDM,
+    // with analog power 0x40=C3, 16-bit format 0x11=60, and mic power 0x4B=0F.
+    // This power-up sequence follows ESPHome ES7210::setup() (2026.10.2).
+    // Party Radio must keep its own 48 kHz 12.288 MHz output clock for radio.
+    // The ES7210 coeff values below are the 48 kHz / 12.288 MHz table entry.
+    const uint8_t setup[][2] = {
+      {0x00,0xFF},{0x00,0x32},{0x01,0x3F},
+      {0x09,0x30},{0x0A,0x30},
+      {0x23,0x2A},{0x22,0x0A},{0x20,0x0A},{0x21,0x2A},
+      {0x40,0xC3},{0x41,0x70},{0x42,0x70},
       {0x11,0x60},{0x12,0x00},
-      {0x47,0x08},{0x48,0x08},{0x49,0x08},{0x4A,0x08},
-      {0x4B,0xff},{0x4C,0xff}
+      // 48 kHz, MCLK=12.288 MHz, standard I2S format; match radio clock.
+      {0x02,0xC1},{0x07,0x20},{0x04,0x01},{0x05,0x00},
+      {0x47,0x08},{0x48,0x08},{0x49,0x08},{0x4A,0x08}
     };
-    for(const auto &item:seq)if(!wr(item[0],item[1])){failure="ES7210 register setup failed";return false;}
-    if(!upd(0x01,0x0b,0x00) || !wr(0x4B,0x00)) {failure="ES7210 MIC1/2 power failed";return false;}
+    for(const auto& r:setup)if(!wr(r[0],r[1])){
+      failure="ES7210 ESPHome-reference register setup failed";return false;
+    }
+    if(!upd(0x08,0x01,0x00)) {failure="ES7210 I2S mode setup failed";return false;}
+    // Channel gain sequence mirrors the working Sam/ESPHome driver.
+    // 0x10 enables the channel, low nibble is the gain step (0..14).
     gain=constrain(int(gain),0,14);
-    if(!upd(0x43,0x1f,0x10|gain)||!upd(0x44,0x1f,0x10|gain)) {failure="ES7210 microphone gain setup failed";return false;}
-    if(!wr(0x06,0x00)||!wr(0x01,0x00)){failure="ES7210 clock startup failed";return false;}
+    if(!upd(0x01,0x0B,0x00) ||
+       !wr(0x4B,0x00) ||
+       !wr(0x43,uint8_t(0x10|gain)) ||
+       !wr(0x44,uint8_t(0x10|gain))) {
+      failure="ES7210 microphone enable/gain failed";return false;
+    }
+    // Power on bias/ADC/PGA, then enable device with ESPHome reset edge.
+    // v3.5 ended with 0x4B=0x00 and never issued 0x71 -> 0x41.
+    if(!wr(0x06,0x04) || !wr(0x4B,0x0F) || !wr(0x4C,0x0F) ||
+       !wr(0x00,0x71) || !wr(0x00,0x41)) {
+      failure="ES7210 final power-up/reset sequence failed";return false;
+    }
+    const int analog=rd(0x40), power=rd(0x4B), fmt=rd(0x11);
+    Serial.printf("VOICE: ES7210 readback: analog 0x40=%02X, power 0x4B=%02X, I2S 0x11=%02X\n", analog,power,fmt);
+    if(analog!=0xC3 || power!=0x0F || (fmt&0xE0)!=0x60){
+      failure="ES7210 power/I2S registers failed readback";return false;
+    }
     return true;
   }
   bool initRx() {
@@ -190,6 +210,9 @@ namespace Voice {
   uint16_t micLeftLevel(){return leftLevel.load();}
   uint16_t micRightLevel(){return rightLevel.load();}
   uint8_t selectedChannel(){return captureChannel.load();}
+  int micAnalogReg(){return rd(0x40);}
+  int micPowerReg(){return rd(0x4B);}
+  int micFormatReg(){return rd(0x11);}
   void setEnabled(bool on){targetOn.store(on);if(detected.load())sr_set_mode(on?SR_MODE_WAKEWORD:SR_MODE_OFF);}
   bool enabled(){return targetOn.load();}
 }

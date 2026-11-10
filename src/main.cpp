@@ -334,6 +334,9 @@ void statusResponse() {
   d["voiceCommandCount"]=Voice::recognizedCommands();
   d["micLeftLevel"]=Voice::micLeftLevel();
   d["micRightLevel"]=Voice::micRightLevel();
+  d["micReg40"]=Voice::micAnalogReg();
+  d["micReg4B"]=Voice::micPowerReg();
+  d["micReg11"]=Voice::micFormatReg();
   d["micChannel"]=micChannel;
   d["voiceWakeWord"]="Computer";
   d["voiceError"]=Voice::error();

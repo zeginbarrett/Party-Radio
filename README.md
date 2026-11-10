@@ -12,8 +12,11 @@
 
 </div>
 
+> [!WARNING]
+> **v3.6 microphone power-up repair (experimental):** A real Waveshare v3.5 showed Left 9 / Right 0 and no Computer detections. The new source uses the working Sam / ESPHome reference ES7210 initialization (analog 0x40=C3, mic power 0x4B=0F and 0x71→0x41 enable/reset), and adds register readback to the Voice diagnostics. Radio playback stays at 48 kHz, so **simultaneous mic/radio operation is NOT yet verified on hardware**. See [Sam microphone comparison](SAM-MIC-COMPARISON-v3.6.md).
+
 > [!IMPORTANT]
-> **Experimental source release, v3.5 (November 2026).** The project includes firmware source and a build-and-flash installer, **not a verified precompiled BIN**. Earlier builds had Windows toolchain/compiler failures, and v3.4's GCC workaround has not yet been confirmed on the physical Waveshare board. The wake word, audio streaming, and microphone coexistence still need board testing. The installer must successfully compile and validate voice-model files before flashing. **No firmware backups are performed.**
+> **Experimental source release, v3.6 (November 2026).** The project includes firmware source and a build-and-flash installer, **not a verified precompiled BIN**. Earlier builds had Windows toolchain/compiler failures, and v3.4's GCC workaround has not yet been confirmed on the physical Waveshare board. The wake word, audio streaming, and microphone coexistence still need board testing. The installer must successfully compile and validate voice-model files before flashing. **No firmware backups are performed.**
 
 
 > [!WARNING]
