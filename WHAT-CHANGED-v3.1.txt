@@ -1,0 +1,12 @@
+WAVESHARE PARTY RADIO 20 PRO v3.1 - BUILD + VOICE EVENT FIX
+
+1. PLATFORMIO_CORE_DIR points to an isolated PartyRadio20Pro cache in LOCALAPPDATA.
+2. PlatformIO version pinned to 6.1.19, compatible with pioarduino 55.03.39's SCons 4.8.1.
+3. Mono COMPUTER wake-word event now activates command recognition.
+4. Preserves 20 presets, Pro web interface, party LEDs, automatic playback, and voice engine.
+5. Never reads or backs up the Waveshare flash.
+6. Doesn't modify C:\Sam, Pi, or your existing PlatformIO cache.
+
+Double-click FLASH-WAVESHARE.bat after extracting the ZIP.
+This is buildable source + installer (NOT a precompiled BIN).
+If compilation fails, nothing is flashed.

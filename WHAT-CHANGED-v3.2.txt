@@ -1,0 +1,9 @@
+Party Radio Pro v3.2 link repair
+
+- Adds CONFIG_AUTOSTART_ARDUINO=y to link the setup()/loop() entry point.
+- Adds CONFIG_MBEDTLS_PSK_MODES=y and CONFIG_MBEDTLS_KEY_EXCHANGE_PSK=y to link HTTPS client functions.
+- Checks generated sdkconfig and voice model before flashing.
+- Retains 20 presets, Wi-Fi AP+LAN controller, party LEDs, and Computer offline voice source.
+- NO WAVESHARE BACKUP STEP OR FLASH READ.
+- Uses isolated PlatformIO 6.1.19 directory; PC Sam and Pi untouched.
+- No precompiled or device-tested binary included.

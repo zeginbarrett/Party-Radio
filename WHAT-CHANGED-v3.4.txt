@@ -1,0 +1,12 @@
+WAVESHARE PARTY RADIO 20 PRO v3.4
+
+New repair for GCC internal compiler error while compiling Espressif esp_lcd_panel_rgb.c during RTL pass ira.
+- Compile ESP-IDF with Optimize for size (-Os), as suggested by reported workarounds for the same GCC bug.
+- Only one concurrent compiler job.
+- Project-only regeneration if a stale generated SDK config still has the old optimization.
+- Verify generated size-optimization setting before flashing.
+- No firmware flash backup/read step.
+
+Retains 20 radio presets, instant radio on Wi-Fi boot, permanently accessible web interface, reactive LEDs, Computer voice recognition source and model checks.
+
+This is a source/build-tool fix, not a compiled/hardware-tested image. No flashing if compilation fails.
